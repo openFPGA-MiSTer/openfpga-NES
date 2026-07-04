@@ -20,12 +20,12 @@ def nes_workflow(name):
     core.workflow(
         name = name,
         origin = git.origin(url = upstream_url, ref = "master"),
-        destination = git.github_pr_destination(
+        # Push straight to the fork branch, no PR (matches MiSTer-DB9):
+        # stable tracks releases on master, unstable is the HEAD canary branch.
+        destination = git.destination(
             url = downstream_url,
-            destination_ref = "master",
-            pr_branch = "vendor/upstream-sync" if name == "unstable" else "vendor/upstream-sync-stable",
-            title = "[UPSTREAM] Sync MiSTer NES core (%s)" % name,
-            integrates = [],
+            push = "master" if name == "stable" else "unstable",
+            fetch = "master" if name == "stable" else "unstable",
         ),
         mode = "SQUASH",
         authoring = authoring.pass_thru("Copybara <copybara@openfpga-mister>"),
