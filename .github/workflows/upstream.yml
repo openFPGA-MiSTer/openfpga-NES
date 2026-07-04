@@ -46,7 +46,7 @@ jobs:
             -v "$HOME/.gitconfig":/root/.gitconfig:Z \
             -v "$HOME/.git-credentials":/root/.git-credentials:Z \
             ghcr.io/anipos/copybara-docker-image \
-            --ignore-noop migrate /usr/src/app/.github/copy.bara.sky "${CHANNEL}" ${REF:+"${REF}"}
+            --ignore-noop --init-history migrate /usr/src/app/.github/copy.bara.sky "${CHANNEL}" ${REF:+"${REF}"}
           EXIT_CODE=$?
           set -e
           # Copybara exit 4 = "no changes to import" -> success no-op.

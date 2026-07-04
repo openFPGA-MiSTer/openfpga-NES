@@ -27,7 +27,7 @@ def nes_workflow(name):
             title = "[UPSTREAM] Sync MiSTer NES core (%s)" % name,
             integrates = [],
         ),
-        mode = "ITERATIVE",
+        mode = "SQUASH",
         authoring = authoring.pass_thru("Copybara <copybara@openfpga-mister>"),
         origin_files = glob(["rtl/**"]),
         # Keep rtl/upstream/** 1:1 with upstream except the fork's own qip.
