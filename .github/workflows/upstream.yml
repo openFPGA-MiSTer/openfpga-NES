@@ -1,12 +1,21 @@
-name: Sync Upstream
+name: Sync Upstream (MiSTer)
 on:
   workflow_dispatch:
-  schedule:
-    # Run at midnight UTC daily
-    - cron: "0 0 * * *"
+    inputs:
+      channel:
+        description: "unstable (MiSTer HEAD) or stable (release commit)"
+        type: choice
+        options: [unstable, stable]
+        default: unstable
+      ref:
+        description: "Source ref/commit override (stable channel passes the release commit)"
+        type: string
+        required: false
+        default: ""
+  # The hub (Forks_openFPGA) also dispatches this via the GitHub API.
 
 jobs:
-  pr-upstream:
+  sync:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -21,23 +30,36 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          echo "https://user:${{ secrets.CUSTOM_GH_TOKEN }}@github.com" > /home/runner/.git-credentials
+          echo "https://user:${{ secrets.CUSTOM_GH_TOKEN }}@github.com" > "$HOME/.git-credentials"
           git config --global credential.helper store
 
-      - name: "Copybara"
+      - name: Copybara sync
+        id: copybara
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          REF: ${{ inputs.ref }}
         run: |
-          # Allow us to capture the Docker exit code
           set +e
-          /usr/bin/docker run \
-          -v "$(pwd)":/usr/src/app \
-          -v /home/runner/.ssh/known_hosts:/root/.ssh/known_hosts \
-          -v /home/runner/.gitconfig:/root/.gitconfig \
-          -v /home/runner/.git-credentials:/root/.git-credentials \
-          ghcr.io/anipos/copybara-docker-image \
-          --ignore-noop migrate /usr/src/app/.github/copy.bara.sky
+          # ubuntu-latest ships podman; use it per project policy (no docker).
+          podman run --rm \
+            -v "$(pwd)":/usr/src/app:Z \
+            -v "$HOME/.gitconfig":/root/.gitconfig:Z \
+            -v "$HOME/.git-credentials":/root/.git-credentials:Z \
+            ghcr.io/anipos/copybara-docker-image \
+            --ignore-noop migrate /usr/src/app/.github/copy.bara.sky "${CHANNEL}" ${REF:+"${REF}"}
           EXIT_CODE=$?
           set -e
-          if [ $EXIT_CODE -eq 4 ]; then
+          # Copybara exit 4 = "no changes to import" -> success no-op.
+          if [ "$EXIT_CODE" -eq 4 ]; then
+            echo "No upstream changes."
             exit 0
           fi
-          exit $EXIT_CODE
+          exit "$EXIT_CODE"
+
+      - name: Notify failure (Telegram)
+        if: failure() && steps.copybara.outcome == 'failure'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          bash .github/notify_error.sh "UPSTREAM ${{ inputs.channel }} copybara sync failed"

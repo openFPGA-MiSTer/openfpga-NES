@@ -1,51 +1,43 @@
+# Copybara config for openfpga-NES: keep the vendored MiSTer NES core in
+# rtl/upstream/ updated to MiSTer-devel/NES_MiSTer.
+#
+# Generalized from agg23's original openfpga-NES/.github/copy.bara.sky:
+#   - downstream retargeted to the openFPGA-MiSTer org fork,
+#   - split into "unstable" (MiSTer HEAD) and "stable" (release commit) workflows.
+# MiSTer NES sources are already LF, so no CR-strip transform is needed (unlike SNES).
+
 upstream_url = "https://github.com/MiSTer-devel/NES_MiSTer.git"
-downstream_url = "https://github.com/agg23/openfpga-NES.git"
+downstream_url = "https://github.com/openFPGA-MiSTer/openfpga-NES.git"
 
-core.workflow(
-    # Must be default to run automatically when Copybara runs
-    # This is actually set in the Github Actions config in this instance
-    name = "default",
-    
-    # ORIGIN: Where the code comes from
-    origin = git.origin(
-        url = upstream_url,
-        ref = "master",
-    ),
+patches = [
+    "upstream_patches/cart.patch",
+    "upstream_patches/FDS.patch",
+    "upstream_patches/nes.patch",
+    "upstream_patches/zapper.patch",
+]
 
-    destination = git.github_pr_destination(
-        url = downstream_url,
-        destination_ref = "master",
-        pr_branch = "vendor/upstream-sync",
-        title = "Latest upstream",
-        
-        # Make incremental branches, updating the PR as necessary, and restarting once PR is merged
-        integrates = [], 
-    ),
+def nes_workflow(name):
+    core.workflow(
+        name = name,
+        origin = git.origin(url = upstream_url, ref = "master"),
+        destination = git.github_pr_destination(
+            url = downstream_url,
+            destination_ref = "master",
+            pr_branch = "vendor/upstream-sync" if name == "unstable" else "vendor/upstream-sync-stable",
+            title = "[UPSTREAM] Sync MiSTer NES core (%s)" % name,
+            integrates = [],
+        ),
+        mode = "ITERATIVE",
+        authoring = authoring.pass_thru("Copybara <copybara@openfpga-mister>"),
+        origin_files = glob(["rtl/**"]),
+        # Keep rtl/upstream/** 1:1 with upstream except the fork's own qip.
+        destination_files = glob(["rtl/upstream/**"], exclude = ["rtl/upstream/nes_mister.qip"]),
+        transformations = [
+            core.move("rtl", "rtl/upstream"),
+            patch.apply(patches = patches),
+            metadata.add_header("[UPSTREAM] ", ignore_label_not_found = True, new_line = False),
+        ],
+    )
 
-    # 1:1 commits
-    mode = "ITERATIVE",
-
-    # Pass through upstream author
-    authoring = authoring.pass_thru("Copybara <copybara@example.com>"),
-
-    # The files to keep from the source
-    origin_files = glob(["rtl/**"]),
-
-    # The files from the source that we keep 1:1 with the destination. Files that match this blob and aren't in the source are deleted.
-    # Files that don't match this blob are always kept on the destination
-    destination_files = glob(["rtl/upstream/**"], exclude = ["rtl/upstream/nes_mister.qip"]),
-
-    # Move source files to destination location
-    transformations = [
-        core.move("rtl", "rtl/upstream"),
-        # Copybara only wants to have one source of truth, so we must apply patches for the changes we make to upstream
-        # It also won't go up a directory ("../") for some reason
-        patch.apply(patches = [
-          "upstream_patches/cart.patch",
-          "upstream_patches/FDS.patch",
-          "upstream_patches/nes.patch",
-          "upstream_patches/zapper.patch",
-        ]),
-        metadata.add_header("[UPSTREAM] ", ignore_label_not_found=True, new_line=False),
-    ],
-)
+nes_workflow("unstable")
+nes_workflow("stable")
