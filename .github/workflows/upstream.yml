@@ -40,13 +40,20 @@ jobs:
           REF: ${{ inputs.ref }}
         run: |
           set +e
+          # The stable channel passes a bare commit SHA as the origin ref, which
+          # carries no branch context, so github_pr_destination needs the PR
+          # branch spelled out. Keep these in sync with pr_branch in copy.bara.sky.
+          PR_BRANCH="vendor/upstream-sync"
+          [ "${CHANNEL}" = "stable" ] && PR_BRANCH="vendor/upstream-sync-stable"
           # ubuntu-latest ships podman; use it per project policy (no docker).
           podman run --rm \
             -v "$(pwd)":/usr/src/app:Z \
             -v "$HOME/.gitconfig":/root/.gitconfig:Z \
             -v "$HOME/.git-credentials":/root/.git-credentials:Z \
             ghcr.io/anipos/copybara-docker-image \
-            --ignore-noop --init-history migrate /usr/src/app/.github/copy.bara.sky "${CHANNEL}" ${REF:+"${REF}"}
+            --ignore-noop --init-history \
+            --github-destination-pr-branch="${PR_BRANCH}" \
+            migrate /usr/src/app/.github/copy.bara.sky "${CHANNEL}" ${REF:+"${REF}"}
           EXIT_CODE=$?
           set -e
           # Copybara exit 4 = "no changes to import" -> success no-op.
